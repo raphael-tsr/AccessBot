@@ -4,7 +4,7 @@
   "description": "Bot Discord pour gérer les rôles",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node src/index.js"
   },
   "dependencies": {
     "discord.js": "^14.16.0"

@@ -1,5 +1,11 @@
 {
+  "name": "accessbot",
+  "version": "1.0.0",
+  "main": "index.js",
   "dependencies": {
     "discord.js": "^14.24.2"
+  },
+  "scripts": {
+    "start": "node index.js"
   }
 }

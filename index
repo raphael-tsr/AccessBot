@@ -1,0 +1,132 @@
+const { 
+    Client, 
+    GatewayIntentBits, 
+    Partials, 
+    ActionRowBuilder, 
+    StringSelectMenuBuilder, 
+    ButtonBuilder, 
+    ButtonStyle, 
+    PermissionFlagsBits 
+} = require("discord.js");
+
+// --- CONFIGURATION --- //
+const TOKEN = process.env.TOKEN;
+
+const ROLES = {
+    "role1": "1425922513044508775", // Booster
+    "role2": "1425946548205785189",// Buyer
+    "role3": "1429904240285057066"  // Customer
+};
+
+const CATEGORY_ID = "1439406975602397284";
+// --- FIN CONFIGURATION --- //
+
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds, 
+        GatewayIntentBits.GuildMembers, 
+        GatewayIntentBits.GuildMessages, 
+        GatewayIntentBits.MessageContent
+    ],
+    partials: [Partials.Channel]
+});
+
+client.once("ready", () => {
+    console.log(`Bot connecté en tant que ${client.user.tag}`);
+});
+
+// Commande pour envoyer le menu de sélection de rôle
+client.on("messageCreate", async message => {
+    if (message.content === "!roles" && message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+
+        const menu = new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+                .setCustomId("select_role")
+                .setPlaceholder("Choisis ton rôle")
+                .addOptions([
+                    { label: "Booster", value: "role1" },
+                    { label: "Buyer", value: "role2" },
+                    { label: "Customer", value: "role3" }
+                ])
+        );
+
+        message.channel.send({
+            content: "⚙️ **Choisis un rôle dans la liste ci-dessous**",
+            components: [menu]
+        });
+    }
+});
+
+// Interaction pour le menu ou les boutons
+client.on("interactionCreate", async interaction => {
+
+    // ----- MENU DE ROLE ----- //
+    if (interaction.isStringSelectMenu() && interaction.customId === "select_role") {
+        const roleKey = interaction.values[0];
+
+        // Créer le ticket visible par le membre et le staff
+        const channel = await interaction.guild.channels.create({
+            name: `ticket-${roleKey}-${interaction.user.username}`,
+            parent: CATEGORY_ID,
+            type: 0, // texte
+            permissionOverwrites: [
+                { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+                { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
+                { id: interaction.guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] },
+                { id: interaction.guild.roles.cache.find(r => r.permissions.has("Administrator")), allow: [PermissionFlagsBits.ViewChannel] }
+            ]
+        });
+
+        // Boutons accepter / refuser
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`accept-${roleKey}-${interaction.user.id}`).setLabel("✅ Accepter").setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId(`reject-${roleKey}-${interaction.user.id}`).setLabel("❌ Refuser").setStyle(ButtonStyle.Danger)
+        );
+
+        await channel.send({
+            content: `🎟️ **Rôle demandé : <@&${ROLES[roleKey]}>**\nMembre : ${interaction.user}`,
+            components: [row]
+        });
+
+        await interaction.reply({ content: `🎟️ Ticket créé : ${channel}`, ephemeral: true });
+    }
+
+    // ----- BOUTONS ACCEPT / REJECT ----- //
+    if (interaction.isButton()) {
+
+        // Vérifier que le cliqueur est admin
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return interaction.reply({ content: "❌ Vous n'avez pas la permission.", ephemeral: true });
+        }
+
+        const [action, roleKey, userId] = interaction.customId.split("-");
+        const member = await interaction.guild.members.fetch(userId);
+        const role = interaction.guild.roles.cache.get(ROLES[roleKey]);
+
+        if (action === "accept") {
+            try {
+                await member.roles.add(role);
+                await interaction.update({ content: `✅ Rôle <@&${role.id}> accepté pour ${member}`, components: [] });
+
+                // Supprimer le salon après 10 secondes
+                setTimeout(async () => {
+                    if (interaction.channel) await interaction.channel.delete().catch(console.error);
+                }, 10000);
+
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: "❌ Impossible d'ajouter le rôle (vérifie la hiérarchie des rôles).", ephemeral: true });
+            }
+        } else if (action === "reject") {
+            await interaction.update({ content: `❌ Rôle <@&${role.id}> refusé pour ${member}`, components: [] });
+
+            // Supprimer le salon après 10 secondes
+            setTimeout(async () => {
+                if (interaction.channel) await interaction.channel.delete().catch(console.error);
+            }, 10000);
+        }
+    }
+});
+
+// Lancer le bot
+client.login(TOKEN);
